@@ -5,7 +5,10 @@
 
 //! Public key common construts, such as the encoding used in an `UnparsedPublicKey`.
 
-use std::ptr::null_mut;
+use std::{
+    os::raw::{c_int, c_void},
+    ptr::null_mut,
+};
 
 use aws_lc::{d2i_PUBKEY_bio, BIO_new, BIO_s_mem, BIO_write, EVP_PKEY};
 
@@ -43,18 +46,11 @@ pub(crate) fn evp_pkey_from_x509_pubkey(
 ) -> Result<LcPtr<EVP_PKEY>, Unspecified> {
     // Create a memory BIO and write the public key data to it
     let mem_bio = LcPtr::new(unsafe { BIO_new(BIO_s_mem()) })?;
-    let len = match std::os::raw::c_int::try_from(pubkey_data.len()) {
+    let len = match c_int::try_from(pubkey_data.len()) {
         Ok(len) => len,
         Err(_) => return Err(Unspecified),
     };
-    if unsafe {
-        BIO_write(
-            *mem_bio,
-            pubkey_data.as_ptr().cast::<std::os::raw::c_void>(),
-            len,
-        )
-    } <= 0
-    {
+    if unsafe { BIO_write(*mem_bio, pubkey_data.as_ptr().cast::<c_void>(), len) } <= 0 {
         return Err(Unspecified);
     }
     // Use d2i_PUBKEY_bio to read the public key from the memory BIO
