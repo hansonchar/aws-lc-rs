@@ -112,6 +112,7 @@ pub mod hmac;
 pub mod io;
 pub mod pbkdf2;
 pub mod pkcs8;
+pub(crate) mod public_key;
 pub mod rand;
 pub mod signature;
 pub mod test;

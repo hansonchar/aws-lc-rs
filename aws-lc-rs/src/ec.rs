@@ -17,15 +17,16 @@ use aws_lc::EC_KEY_check_fips;
 #[cfg(not(feature = "fips"))]
 use aws_lc::EC_KEY_check_key;
 use aws_lc::{
-    point_conversion_form_t, ECDSA_SIG_from_bytes, ECDSA_SIG_get0_r, ECDSA_SIG_get0_s,
-    ECDSA_SIG_new, ECDSA_SIG_set0, ECDSA_SIG_to_bytes, EC_GROUP_get_curve_name,
-    EC_GROUP_new_by_curve_name, EC_KEY_get0_group, EC_KEY_get0_public_key, EC_KEY_new,
-    EC_KEY_set_group, EC_KEY_set_private_key, EC_KEY_set_public_key, EC_POINT_new,
-    EC_POINT_oct2point, EC_POINT_point2oct, EVP_DigestVerify, EVP_DigestVerifyInit,
-    EVP_PKEY_CTX_new_id, EVP_PKEY_CTX_set_ec_paramgen_curve_nid, EVP_PKEY_assign_EC_KEY,
-    EVP_PKEY_get0_EC_KEY, EVP_PKEY_keygen, EVP_PKEY_keygen_init, EVP_PKEY_new,
-    NID_X9_62_prime256v1, NID_secp256k1, NID_secp384r1, NID_secp521r1, BIGNUM, ECDSA_SIG, EC_GROUP,
-    EC_POINT, EVP_PKEY, EVP_PKEY_EC,
+    i2d_PUBKEY_bio, point_conversion_form_t, BIO_get_mem_data, BIO_new, BIO_s_mem,
+    ECDSA_SIG_from_bytes, ECDSA_SIG_get0_r, ECDSA_SIG_get0_s, ECDSA_SIG_new, ECDSA_SIG_set0,
+    ECDSA_SIG_to_bytes, EC_GROUP_get_curve_name, EC_GROUP_new_by_curve_name, EC_KEY_get0_group,
+    EC_KEY_get0_public_key, EC_KEY_new, EC_KEY_set_group, EC_KEY_set_private_key,
+    EC_KEY_set_public_key, EC_POINT_new, EC_POINT_oct2point, EC_POINT_point2oct, EVP_DigestVerify,
+    EVP_DigestVerifyInit, EVP_PKEY_CTX_new_id, EVP_PKEY_CTX_set_ec_paramgen_curve_nid,
+    EVP_PKEY_assign_EC_KEY, EVP_PKEY_get0_EC_KEY, EVP_PKEY_keygen, EVP_PKEY_keygen_init,
+    EVP_PKEY_new, NID_X9_62_prime256v1, NID_secp256k1, NID_secp384r1, NID_secp521r1,
+    X509_PUBKEY_get, BIGNUM, ECDSA_SIG, EC_GROUP, EC_POINT, EVP_PKEY, EVP_PKEY_EC,
+    X25519_PUBLIC_VALUE_LEN, X509_PUBKEY,
 };
 
 #[cfg(test)]
@@ -34,7 +35,7 @@ use aws_lc::EC_POINT_mul;
 use std::fmt::{Debug, Formatter};
 use std::mem::MaybeUninit;
 use std::ops::Deref;
-use std::os::raw::{c_int, c_uint};
+use std::os::raw::{c_char, c_int, c_uint};
 #[cfg(test)]
 use std::ptr::null;
 use std::ptr::null_mut;
@@ -262,6 +263,31 @@ unsafe fn validate_evp_key(
         return Err(KeyRejected::inconsistent_components());
     }
 
+    Ok(())
+}
+
+pub(crate) fn marshal_x509_public_key_to_buffer(
+    buffer: &mut [u8; X25519_PUBLIC_VALUE_LEN as usize],
+    x509_pubkey: &LcPtr<X509_PUBKEY>,
+) -> Result<(), ()> {
+    let buffer_len = buffer.len();
+    let evp_pkey = LcPtr::new(unsafe { X509_PUBKEY_get(**x509_pubkey) })?;
+    let bio = LcPtr::new(unsafe { BIO_new(BIO_s_mem()) })?;
+
+    if unsafe { i2d_PUBKEY_bio(*bio, *evp_pkey) } <= 0 {
+        return Err(());
+    }
+
+    let mut ptr = std::ptr::null_mut::<c_char>();
+    let size = BIO_get_mem_data(*bio, &mut ptr);
+    let size = usize::try_from(size).map_err(|_| ())?;
+
+    if size < buffer_len {
+        return Err(());
+    }
+
+    let slice = unsafe { std::slice::from_raw_parts(ptr as *const u8, size) };
+    buffer.copy_from_slice(&slice[..buffer_len]);
     Ok(())
 }
 
