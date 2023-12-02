@@ -522,6 +522,49 @@ pub fn agree_ephemeral<B: AsRef<[u8]>, F, R, E>(
 where
     F: FnOnce(&[u8]) -> Result<R, E>,
 {
+    agree(&my_private_key, peer_public_key, error_value, kdf)
+}
+
+/// Hack to perform a key agreement with a private key and the given public
+/// key.
+///
+/// `my_private_key` is the private key to use.
+///
+/// `peer_public_key` is the peer's public key. `agree_ephemeral` will return
+/// `Err(error_value)` if it does not match `my_private_key's` algorithm/curve.
+/// `agree_ephemeral` verifies that it is encoded in the standard form for the
+/// algorithm and that the key is *valid*; see the algorithm's documentation for
+/// details on how keys are to be encoded and what constitutes a valid key for
+/// that algorithm.
+///
+/// `error_value` is the value to return if an error occurs before `kdf` is
+/// called, e.g. when decoding of the peer's public key fails or when the public
+/// key is otherwise invalid.
+///
+/// After the key agreement is done, `agree_ephemeral` calls `kdf` with the raw
+/// key material from the key agreement operation and then returns what `kdf`
+/// returns.
+///
+// # FIPS
+// Use this function with one of the following key algorithms:
+// * `ECDH_P256`
+// * `ECDH_P384`
+// * `ECDH_P521`
+//
+/// # Errors
+/// `error_value` on internal failure.
+#[inline]
+#[allow(clippy::needless_pass_by_value)]
+#[allow(clippy::missing_panics_doc)]
+pub fn agree<B: AsRef<[u8]>, F, R, E>(
+    my_private_key: &EphemeralPrivateKey,
+    peer_public_key: &UnparsedPublicKey<B>,
+    error_value: E,
+    kdf: F,
+) -> Result<R, E>
+where
+    F: FnOnce(&[u8]) -> Result<R, E>,
+{
     let expected_alg = my_private_key.algorithm();
     let expected_pub_key_len = expected_alg.id.pub_key_len();
     let expected_nid = expected_alg.id.nid();
